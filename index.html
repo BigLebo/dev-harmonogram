@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ganttův diagram - BTR Nové Dvory</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        h1 { text-align: center; padding: 20px; background: #1f4e79; color: white; margin: 0; }
+        .subtitle { text-align: center; padding: 10px; background: #2e75b6; color: white; font-size: 14px; }
+        .controls { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+        .controls label { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .controls select, .controls input[type="checkbox"] { cursor: pointer; }
+        .legend { display: flex; gap: 15px; padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; flex-wrap: wrap; justify-content: center; font-size: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 20px; height: 12px; border-radius: 2px; }
+        .chart-header { display: flex; background: #1f4e79; color: white; font-weight: bold; font-size: 13px; }
+        .chart-header .activity-col { width: 220px; min-width: 220px; padding: 8px; border-right: 1px solid #3d7ab5; }
+        .chart-header .timeline-col { flex: 1; display: flex; position: relative; }
+        .year-marker { flex: 1; text-align: center; padding: 8px; border-right: 1px solid #3d7ab5; }
+        .quarter-row { display: flex; background: #e9ecef; font-size: 11px; color: #666; }
+        .quarter-row .activity-col { width: 220px; min-width: 220px; padding: 4px 8px; border-right: 1px solid #ddd; font-weight: bold; }
+        .quarter-row .timeline-col { flex: 1; position: relative; height: 20px; }
+        .quarter-marker { position: absolute; top: 0; height: 100%; border-left: 1px solid #ccc; padding-left: 4px; font-size: 10px; }
+        .chart-body { max-height: 600px; overflow-y: auto; }
+        .activity-row { display: flex; border-bottom: 1px solid #eee; }
+        .activity-row:nth-child(even) { background: #fafafa; }
+        .activity-row:hover { background: #f0f7ff; }
+        .activity-col { width: 220px; min-width: 220px; padding: 6px 8px; border-right: 1px solid #eee; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+        .activity-code { font-family: monospace; font-weight: bold; color: #1f4e79; min-width: 35px; }
+        .activity-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .timeline-col { flex: 1; position: relative; height: 28px; }
+        .grid-line { position: absolute; top: 0; height: 100%; border-left: 1px solid #eee; }
+        .bar { position: absolute; top: 4px; height: 20px; border-radius: 3px; display: flex; align-items: center; padding: 0 4px; font-size: 10px; font-weight: bold; color: #333; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+        .bar:hover { transform: scaleY(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10; }
+        .bar.critical { box-shadow: inset 0 0 0 2px rgba(0,0,0,0.15); }
+        .bar.non-critical { opacity: 0.5; }
+        .bar.risk { border: 2px solid #dc3545; }
+        .milestone { position: absolute; top: 50%; transform: translateY(-50%) rotate(45deg); width: 10px; height: 10px; background: #6f42c1; border: 2px solid #4a2c82; }
+        .phase-0 { background: #c5e0b4; }
+        .phase-0A { background: #a8d08d; }
+        .phase-1 { background: #bdd7ee; }
+        .phase-1A { background: #9bc2e6; }
+        .phase-2 { background: #ffe699; }
+        .phase-3 { background: #f8cbad; }
+        .phase-4 { background: #d9d2e9; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 20px; background: #f8f9fa; }
+        .summary-card { background: white; padding: 15px; border-radius: 8px; border-left: 4px solid; }
+        .summary-card.blue { border-color: #2e75b6; }
+        .summary-card.red { border-color: #dc3545; }
+        .summary-card.green { border-color: #28a745; }
+        .summary-card h3 { font-size: 14px; margin-bottom: 8px; }
+        .summary-card ul { font-size: 12px; padding-left: 15px; }
+        .summary-card li { margin: 4px 0; }
+        .hidden { display: none; }
+        @media print {
+            .controls { display: none; }
+            .chart-body { max-height: none; overflow: visible; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GANTTŮV DIAGRAM – BTR Nové Dvory</h1>
+        <div class="subtitle">Kritická cesta: 189 týdnů (43 měsíců) | Termín: 1.1.2026 → 17.8.2029</div>
+        
+        <div class="controls">
+            <label>
+                Fáze:
+                <select id="phaseFilter">
+                    <option value="all">Všechny fáze</option>
+                    <option value="0">0: Příprava</option>
+                    <option value="0A">0A: Financování I</option>
+                    <option value="1">1: Projektová příprava</option>
+                    <option value="1A">1A: Financování II</option>
+                    <option value="2">2: Výběr dodavatele</option>
+                    <option value="3">3: Realizace</option>
+                    <option value="4">4: Provoz</option>
+                </select>
+            </label>
+            <label>
+                <input type="checkbox" id="criticalOnly">
+                Pouze kritická cesta
+            </label>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color phase-0"></div>0: Příprava</div>
+            <div class="legend-item"><div class="legend-color phase-0A"></div>0A: Fin. I</div>
+            <div class="legend-item"><div class="legend-color phase-1"></div>1: Projekt</div>
+            <div class="legend-item"><div class="legend-color phase-1A"></div>1A: Fin. II</div>
+            <div class="legend-item"><div class="legend-color phase-2"></div>2: Výběr GD</div>
+            <div class="legend-item"><div class="legend-color phase-3"></div>3: Realizace</div>
+            <div class="legend-item"><div class="legend-color phase-4"></div>4: Provoz</div>
+            <div class="legend-item"><div class="legend-color" style="border: 2px solid #dc3545; background: #ffe6e6;"></div>Vysoké riziko</div>
+            <div class="legend-item"><div class="legend-color" style="opacity: 0.5; background: #999;"></div>Mimo krit. cestu</div>
+        </div>
+
+        <div class="chart-header">
+            <div class="activity-col">Aktivita</div>
+            <div class="timeline-col">
+                <div class="year-marker">2026</div>
+                <div class="year-marker">2027</div>
+                <div class="year-marker">2028</div>
+                <div class="year-marker">2029</div>
+            </div>
+        </div>
+
+        <div class="quarter-row">
+            <div class="activity-col">Kód | Název</div>
+            <div class="timeline-col" id="quarterMarkers"></div>
+        </div>
+
+        <div class="chart-body" id="chartBody"></div>
+
+        <div class="summary">
+            <div class="summary-card blue">
+                <h3>📊 Kritická cesta</h3>
+                <p>29 aktivit bez časové rezervy</p>
+                <p style="font-size: 11px; color: #666; margin-top: 5px;">Jakékoliv zpoždění = zpoždění projektu</p>
+            </div>
+            <div class="summary-card red">
+                <h3>⚠️ Nejvyšší riziko zpoždění</h3>
+                <ul>
+                    <li><strong>3.5</strong> Hrubá stavba (22 týdnů)</li>
+                    <li><strong>3.7</strong> TZB instalace (13 týdnů)</li>
+                    <li><strong>1.3+1.4</strong> Povolení (24 týdnů)</li>
+                </ul>
+            </div>
+            <div class="summary-card green">
+                <h3>✓ Aktivity s rezervou</h3>
+                <ul>
+                    <li>Financování (běží paralelně)</li>
+                    <li>Pre-leasing (během dokončování)</li>
+                    <li>FM nastavení (během kolaudace)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const projectStart = new Date(2026, 0, 1);
+        const projectEnd = new Date(2029, 7, 31);
+        const totalDays = Math.ceil((projectEnd - projectStart) / (1000 * 60 * 60 * 24));
+
+        const activities = [
+            { code: '0.1', name: 'Analýza území a regulativů', start: '2026-01-01', end: '2026-01-29', phase: '0', critical: true },
+            { code: '0.2', name: 'Analýza trhu', start: '2026-01-01', end: '2026-01-22', phase: '0', critical: false },
+            { code: '0.3', name: 'SWOT projektu', start: '2026-01-01', end: '2026-01-08', phase: '0', critical: false },
+            { code: '0.4', name: 'Identifikace rizik', start: '2026-01-01', end: '2026-01-08', phase: '0', critical: false },
+            { code: '0.5', name: 'Ekonomické posouzení', start: '2026-01-01', end: '2026-01-15', phase: '0', critical: false },
+            { code: '0.6', name: 'Geologický průzkum', start: '2026-01-15', end: '2026-02-05', phase: '0', critical: false },
+            { code: '0A.1', name: 'Předjednání financování', start: '2026-01-29', end: '2026-04-09', phase: '0A', critical: false },
+            { code: '0A.2', name: 'Aktualizace fin. modelu', start: '2026-04-09', end: '2026-05-07', phase: '0A', critical: false },
+            { code: '0A.3', name: 'Nezávazné nabídky bank', start: '2026-05-07', end: '2026-06-11', phase: '0A', critical: false },
+            { code: '1.1', name: 'Architektonická studie', start: '2026-01-29', end: '2026-03-19', phase: '1', critical: true },
+            { code: '1.2', name: 'Konzultace se stav. úřadem', start: '2026-03-19', end: '2026-04-16', phase: '1', critical: true },
+            { code: '1.3', name: 'DPZ (vč. DOSS)', start: '2026-04-16', end: '2026-07-09', phase: '1', critical: true, risk: true },
+            { code: '1.4', name: 'Řízení o povolení záměru', start: '2026-07-09', end: '2026-10-01', phase: '1', critical: true, risk: true },
+            { code: '1.5', name: 'Buffer – odvolací lhůta', start: '2026-10-01', end: '2026-10-29', phase: '1', critical: true },
+            { code: '1.6', name: 'Value engineering', start: '2026-10-29', end: '2026-11-26', phase: '1', critical: true },
+            { code: '1.7', name: 'PDPS', start: '2026-11-26', end: '2027-02-18', phase: '1', critical: true },
+            { code: '1A.1', name: 'DD banky', start: '2026-11-26', end: '2027-01-07', phase: '1A', critical: false },
+            { code: '1A.2', name: 'Vyjednání úvěru', start: '2027-01-07', end: '2027-02-18', phase: '1A', critical: false },
+            { code: '1A.3', name: 'Podpis úvěrové smlouvy', start: '2027-02-18', end: '2027-03-04', phase: '1A', critical: false },
+            { code: '2.1', name: 'Poptávkové řízení GD', start: '2027-02-18', end: '2027-03-18', phase: '2', critical: true },
+            { code: '2.2', name: 'Vyhodnocení a vyjednávání', start: '2027-03-18', end: '2027-04-08', phase: '2', critical: true },
+            { code: '2.3', name: 'Smlouva o dílo', start: '2027-04-08', end: '2027-04-22', phase: '2', critical: true },
+            { code: '2.4', name: 'Pojištění stavby', start: '2027-04-22', end: '2027-04-29', phase: '2', critical: true },
+            { code: '3.1', name: 'Zařízení staveniště', start: '2027-04-29', end: '2027-05-13', phase: '3', critical: true },
+            { code: '3.2', name: 'Zemní práce', start: '2027-05-13', end: '2027-06-17', phase: '3', critical: true },
+            { code: '3.3', name: 'Základy', start: '2027-06-17', end: '2027-07-15', phase: '3', critical: true },
+            { code: '3.4', name: 'Suterén', start: '2027-07-15', end: '2027-08-26', phase: '3', critical: true },
+            { code: '3.5', name: 'Hrubá stavba NP', start: '2027-08-26', end: '2028-01-27', phase: '3', critical: true, risk: true },
+            { code: '3.6', name: 'Střecha a fasáda', start: '2028-01-27', end: '2028-03-30', phase: '3', critical: true },
+            { code: '3.7', name: 'Instalace TZB', start: '2028-03-30', end: '2028-06-29', phase: '3', critical: true, risk: true },
+            { code: '3.8', name: 'Okna, výplně', start: '2028-06-29', end: '2028-07-27', phase: '3', critical: true },
+            { code: '3.9', name: 'Omítky, SDK', start: '2028-07-27', end: '2028-09-07', phase: '3', critical: true },
+            { code: '3.10', name: 'Podlahy, dlažby', start: '2028-09-07', end: '2028-10-05', phase: '3', critical: true },
+            { code: '3.11', name: 'Interiéry', start: '2028-10-05', end: '2028-11-16', phase: '3', critical: true },
+            { code: '3.12', name: 'Revize a zkoušky', start: '2028-11-16', end: '2028-12-07', phase: '3', critical: true },
+            { code: '3.13', name: 'Kolaudace', start: '2028-12-07', end: '2029-01-11', phase: '3', critical: true },
+            { code: '3.14', name: 'Předání stavby', start: '2029-01-11', end: '2029-01-25', phase: '3', critical: true },
+            { code: '4.1', name: 'Pre-leasing', start: '2028-10-05', end: '2028-12-28', phase: '4', critical: false },
+            { code: '4.2', name: 'Nastavení FM', start: '2028-12-07', end: '2029-01-04', phase: '4', critical: false },
+            { code: '4.3', name: 'Předání nájemníkům', start: '2029-01-25', end: '2029-02-22', phase: '4', critical: true },
+            { code: '4.4', name: 'Stabilizace provozu', start: '2029-02-22', end: '2029-05-17', phase: '4', critical: true },
+            { code: '4.5', name: '50% obsazenost', start: '2029-05-17', end: '2029-05-17', phase: '4', critical: true, milestone: true },
+            { code: '4.6', name: '95% obsazenost', start: '2029-05-17', end: '2029-08-17', phase: '4', critical: true },
+        ];
+
+        function getPosition(dateStr) {
+            const date = new Date(dateStr);
+            const days = Math.ceil((date - projectStart) / (1000 * 60 * 60 * 24));
+            return (days / totalDays) * 100;
+        }
+
+        function getWidth(start, end) {
+            const s = new Date(start);
+            const e = new Date(end);
+            const days = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
+            return Math.max((days / totalDays) * 100, 0.5);
+        }
+
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric' });
+        }
+
+        // Generate quarter markers
+        function generateQuarterMarkers() {
+            const container = document.getElementById('quarterMarkers');
+            const quarters = ['I', 'II', 'III', 'IV'];
+            let html = '';
+            
+            for (let year = 2026; year <= 2029; year++) {
+                for (let q = 0; q < 4; q++) {
+                    const date = new Date(year, q * 3, 1);
+                    if (date <= projectEnd) {
+                        const pos = getPosition(date.toISOString().split('T')[0]);
+                        html += `<div class="quarter-marker" style="left: ${pos}%">Q${quarters[q]}</div>`;
+                    }
+                }
+            }
+            container.innerHTML = html;
+        }
+
+        // Render chart
+        function renderChart() {
+            const phaseFilter = document.getElementById('phaseFilter').value;
+            const criticalOnly = document.getElementById('criticalOnly').checked;
+            const container = document.getElementById('chartBody');
+            
+            let html = '';
+            
+            const filteredActivities = activities.filter(act => {
+                if (criticalOnly && !act.critical) return false;
+                if (phaseFilter !== 'all' && act.phase !== phaseFilter) return false;
+                return true;
+            });
+
+            // Generate grid lines
+            const gridLines = [];
+            for (let year = 2026; year <= 2029; year++) {
+                for (let q = 0; q < 4; q++) {
+                    const date = new Date(year, q * 3, 1);
+                    if (date <= projectEnd) {
+                        gridLines.push(getPosition(date.toISOString().split('T')[0]));
+                    }
+                }
+            }
+
+            filteredActivities.forEach((act, idx) => {
+                const barClasses = [
+                    'bar',
+                    `phase-${act.phase.replace('.', '')}`,
+                    act.critical ? 'critical' : 'non-critical',
+                    act.risk ? 'risk' : ''
+                ].filter(Boolean).join(' ');
+
+                const tooltip = `${act.code}: ${act.name}\n${formatDate(act.start)} → ${formatDate(act.end)}${act.critical ? '\n★ Kritická cesta' : ''}`;
+
+                html += `
+                    <div class="activity-row">
+                        <div class="activity-col">
+                            <span class="activity-code">${act.code}</span>
+                            <span class="activity-name" title="${act.name}">${act.name}</span>
+                        </div>
+                        <div class="timeline-col">
+                            ${gridLines.map(pos => `<div class="grid-line" style="left: ${pos}%"></div>`).join('')}
+                            ${act.milestone 
+                                ? `<div class="milestone" style="left: ${getPosition(act.start)}%" title="${tooltip}"></div>`
+                                : `<div class="${barClasses}" style="left: ${getPosition(act.start)}%; width: ${getWidth(act.start, act.end)}%;" title="${tooltip}">${getWidth(act.start, act.end) > 2.5 ? act.code : ''}</div>`
+                            }
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Event listeners
+        document.getElementById('phaseFilter').addEventListener('change', renderChart);
+        document.getElementById('criticalOnly').addEventListener('change', renderChart);
+
+        // Initial render
+        generateQuarterMarkers();
+        renderChart();
+    </script>
+</body>
+</html>
